@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -21,9 +20,7 @@ public class ProductController {
     @PostMapping
     public ResponseEntity<Product> create(@RequestBody Product product) {
         product.setActive(true);
-        if (product.getHistory() == null) {
-            product.setHistory(new ArrayList<>());
-        }
+
         Product savedProduct = repository.save(product);
         return ResponseEntity.ok(savedProduct);
     }
@@ -36,7 +33,6 @@ public class ProductController {
     @PostMapping("/update-now")
     public ResponseEntity<String> forceUpdate() {
         productService.updateAllPrices();
-        return ResponseEntity.ok("Processo de atualização disparado manualmente.");
+        return ResponseEntity.ok("Processo de atualização finalizado ou disparado.");
     }
-
 }

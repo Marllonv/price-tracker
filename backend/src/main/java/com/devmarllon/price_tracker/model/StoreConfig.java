@@ -9,10 +9,15 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = "store_configs")
 @Builder
 public class StoreConfig {
+
     @Id
     private String id;
     private String domain;
     private String containerSelector;
+    private String scrapingType;
     private String mainSelector;
     private String decimalSelector;
+    private String imageSelector;
+    private String nameSelector;
+
 }

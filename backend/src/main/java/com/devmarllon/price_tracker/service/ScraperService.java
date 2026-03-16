@@ -1,61 +1,42 @@
 package com.devmarllon.price_tracker.service;
 
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
+import com.devmarllon.price_tracker.dto.ScrapingResult;
+import com.devmarllon.price_tracker.model.Product;
+import com.devmarllon.price_tracker.model.StoreConfig;
+import com.devmarllon.price_tracker.repository.StoreConfigRepository;
+import com.devmarllon.price_tracker.scraper.ScraperFactory;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import java.io.IOException;
+
+import java.net.URI;
+import java.net.URISyntaxException;
 
 @Service
+@RequiredArgsConstructor
 public class ScraperService {
 
-    public Double getPrice(String url, String containerSelector, String mainSelector, String decimalSelector) {
-        try {
-            Document doc = Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-                    .header("Accept-Language", "pt-BR,pt;q=0.9")
-                    .header("Referer", "https://www.google.com/")
-                    .header("Connection", "keep-alive")
-                    .header("Upgrade-Insecure-Requests", "1")
-                    .header("Sec-Fetch-Dest", "document")
-                    .header("Sec-Fetch-Mode", "navigate")
-                    .header("Sec-Fetch-Site", "cross-site")
-                    .timeout(15000)
-                    .get();
+    private final StoreConfigRepository storeConfigRepository;
+    private final ScraperFactory scraperFactory;
 
-            Element container = (containerSelector != null && !containerSelector.isEmpty())
-                    ? doc.selectFirst(containerSelector)
-                    : doc;
 
-            if (container == null) {
-                return null;
-            }
+    public ScrapingResult scrapeProduct(Product product) {
+        String domain = extractDomain(product.getUrl());
 
-            Element mainElement = container.selectFirst(mainSelector);
-            if (mainElement == null) return null;
+        StoreConfig config = storeConfigRepository.findByDomain(domain)
+                .orElseThrow(() -> new RuntimeException("Configuração não encontrada para o domínio: " + domain));
 
-            String priceText = mainElement.text();
-
-            if (decimalSelector != null && !decimalSelector.isEmpty()) {
-                Element decimalElement = container.selectFirst(decimalSelector);
-                if (decimalElement != null) {
-                    priceText = priceText + "," + decimalElement.text();
-                }
-            }
-
-            return cleanPrice(priceText);
-
-        } catch (IOException e) {
-            System.err.println("Erro ao acessar a URL: " + e.getMessage());
-            return null;
-        }
+        return scraperFactory.getScraper(config.getScrapingType())
+                .execute(product.getUrl(), config);
     }
 
-    private Double cleanPrice(String price) {
-        String cleaned = price.replaceAll("[^0-9,.]", "")
-                .replace(".", "")
-                .replace(",", ".");
-        return Double.parseDouble(cleaned);
+    private String extractDomain(String url) {
+        try {
+            URI uri = new URI(url);
+            String domain = uri.getHost();
+            if (domain == null) return null;
+            return domain.startsWith("www.") ? domain.substring(4) : domain;
+        } catch (URISyntaxException e) {
+            throw new RuntimeException("URL inválida: " + url);
+        }
     }
 }

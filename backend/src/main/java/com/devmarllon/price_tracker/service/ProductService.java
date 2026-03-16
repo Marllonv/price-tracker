@@ -1,9 +1,10 @@
 package com.devmarllon.price_tracker.service;
 
+import com.devmarllon.price_tracker.dto.ScrapingResult;
 import com.devmarllon.price_tracker.model.PriceHistory;
 import com.devmarllon.price_tracker.model.Product;
+import com.devmarllon.price_tracker.repository.PriceHistoryRepository;
 import com.devmarllon.price_tracker.repository.ProductRepository;
-import com.devmarllon.price_tracker.repository.StoreConfigRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -15,38 +16,46 @@ import java.util.List;
 public class ProductService {
 
     private final ProductRepository repository;
+    private final PriceHistoryRepository priceHistoryRepository; // NOVO
     private final ScraperService scraperService;
-    private final StoreConfigRepository storeConfigRepository;
 
     public void updateAllPrices() {
         List<Product> activeProducts = repository.findByActiveTrue();
 
         for (Product product : activeProducts) {
-            String domain = extractDomain(product.getUrl());
-            storeConfigRepository.findByDomain(domain).ifPresent(config -> {
-                Double currentPrice = scraperService.getPrice(
-                        product.getUrl(),
-                        config.getContainerSelector(),
-                        config.getMainSelector(),
-                        config.getDecimalSelector()
-                );
+            try {
+                ScrapingResult result = scraperService.scrapeProduct(product);
 
-                if (currentPrice != null) {
-                    updateProductPrice(product, currentPrice);
+                if (result != null && result.getPrice() != null) {
+                    processPriceUpdate(product, result);
                 }
-            });
+            } catch (Exception e) {
+                System.err.println("Erro ao atualizar produto " + product.getId() + ": " + e.getMessage());
+            }
         }
     }
 
-    private void updateProductPrice(Product product, Double newPrice) {
-        if (!newPrice.equals(product.getLastPrice())) {
-            PriceHistory historyEntry = new PriceHistory(newPrice, LocalDateTime.now());
-            product.getHistory().add(historyEntry);
+    private void processPriceUpdate(Product product, ScrapingResult result) {
+        Double newPrice = result.getPrice();
+
+        if (product.getLastPrice() == null || !newPrice.equals(product.getLastPrice())) {
+
+            PriceHistory history = PriceHistory.builder()
+                    .productId(product.getId())
+                    .price(newPrice)
+                    .timestamp(LocalDateTime.now())
+                    .build();
+
+            priceHistoryRepository.save(history);
+
             product.setLastPrice(newPrice);
 
+            if (result.getImageUrl() != null) {
+                product.setImageUrl(result.getImageUrl());
+            }
+
             if (newPrice <= product.getTargetPrice()) {
-                System.out.println("Alerta: " + product.getName() + " atingiu o preço alvo.");
-                //
+                triggerPriceAlert(product);
             }
         }
 
@@ -54,14 +63,7 @@ public class ProductService {
         repository.save(product);
     }
 
-    private String extractDomain(String url) {
-        try {
-            java.net.URI uri = new java.net.URI(url);
-            String host = uri.getHost();
-            if (host == null) return "";
-            return host.startsWith("www.") ? host.substring(4) : host;
-        } catch (Exception e) {
-            return "";
-        }
+    private void triggerPriceAlert(Product product) {
+        System.out.println("ALERTA: " + product.getName() + " chegou em R$ " + product.getLastPrice());
     }
 }
