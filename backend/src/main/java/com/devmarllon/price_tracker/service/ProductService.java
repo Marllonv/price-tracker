@@ -37,8 +37,14 @@ public class ProductService {
 
     private void processPriceUpdate(Product product, ScrapingResult result) {
         Double newPrice = result.getPrice();
+        Double lastPrice = product.getLastPrice();
 
-        if (product.getLastPrice() == null || !newPrice.equals(product.getLastPrice())) {
+        if (result.getImageUrl() != null) {
+            product.setImageUrl(result.getImageUrl());
+        }
+        product.setLastUpdate(LocalDateTime.now());
+
+        if (lastPrice == null || Math.abs(newPrice - lastPrice) > 0.001) {
 
             PriceHistory history = PriceHistory.builder()
                     .productId(product.getId())
@@ -46,20 +52,15 @@ public class ProductService {
                     .timestamp(LocalDateTime.now())
                     .build();
 
-            priceHistoryRepository.save(history);
-
             product.setLastPrice(newPrice);
 
-            if (result.getImageUrl() != null) {
-                product.setImageUrl(result.getImageUrl());
-            }
+            priceHistoryRepository.save(history);
 
             if (newPrice <= product.getTargetPrice()) {
                 triggerPriceAlert(product);
             }
         }
 
-        product.setLastUpdate(LocalDateTime.now());
         repository.save(product);
     }
 

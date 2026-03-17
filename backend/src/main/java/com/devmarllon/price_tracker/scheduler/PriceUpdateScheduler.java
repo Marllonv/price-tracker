@@ -11,7 +11,7 @@ public class PriceUpdateScheduler {
 
     private final ProductService productService;
 
-    @Scheduled(fixedRate = 1800000)
+    @Scheduled(fixedDelay = 1800000)
     public void checkPricesJob() {
         System.out.println("Iniciando rotina automática de verificação de preços.");
         productService.updateAllPrices();
